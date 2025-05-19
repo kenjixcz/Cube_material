@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js - Phong, Emissive, Shininess (Lantai Tekstur FIX)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #222; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script type="module">
+        import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+
+        // 1. Setup Dasar
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x222222);
+
+        const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            1000
+        );
+        camera.position.set(5, 6, 9);
+        camera.lookAt(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Mouse controls variables
+        let isDragging = false;
+        let previousMousePosition = {
+            x: 0,
+            y: 0
+        };
+        const orbitSpeed = 0.005;
+        let cameraOrbitRadius = Math.sqrt(
+            camera.position.x * camera.position.x + 
+            camera.position.z * camera.position.z
+        );
+        let cameraAngle = Math.atan2(camera.position.z, camera.position.x);
+        let cameraHeight = camera.position.y;
+
+        // 2. Pencahayaan
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        directionalLight.position.set(8, 12, 10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        const pointLight = new THREE.PointLight(0xffccaa, 0.7, 50);
+        pointLight.position.set(-5, 5, 5);
+        pointLight.castShadow = true;
+        scene.add(pointLight);
+
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 50;
+        directionalLight.shadow.camera.left = -15;
+        directionalLight.shadow.camera.right = 15;
+        directionalLight.shadow.camera.top = 15;
+        directionalLight.shadow.camera.bottom = -15;
+
+        pointLight.shadow.mapSize.width = 1024;
+        pointLight.shadow.mapSize.height = 1024;        // 3. Muat Tekstur Utama
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Tambahkan debug untuk folder kerja saat ini
+        console.log("Mencoba memuat tekstur dari:", window.location.href);
+        
+        // Gunakan path absolute untuk tekstur
+        const texturePath = './Uv_Texture.jpg'; // Path relatif terhadap file HTML
+        
+        // Muat tekstur dengan penanganan error yang lebih baik
+        const uvTexture = textureLoader.load(
+            texturePath,
+            (texture) => { 
+                console.log("Tekstur UV utama berhasil dimuat!"); 
+                // Mengatur properti tekstur setelah berhasil dimuat
+                texture.colorSpace = THREE.SRGBColorSpace;
+                
+                // Update material yang menggunakan tekstur ini
+                cubeMaterial.needsUpdate = true;
+                sphereMaterial.needsUpdate = true;
+                pyramidMaterial.needsUpdate = true;
+                floorMaterial.needsUpdate = true;
+            },
+            (xhr) => {
+                console.log((xhr.loaded / xhr.total * 100) + '% tekstur dimuat');
+            },
+            (err) => { 
+                console.error("GAGAL memuat tekstur UV utama:", err); 
+                console.error("Path yang dicoba:", texturePath);
+            }
+        );
+        
+        // Penanganan tekstur yang lebih robust
+        uvTexture.colorSpace = THREE.SRGBColorSpace;
+
+        // Persiapan tekstur untuk lantai (dengan pengulangan)
+        const floorTexture = textureLoader.load(
+            texturePath, 
+            (texture) => {
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(10, 10);
+                texture.colorSpace = THREE.SRGBColorSpace;
+                texture.needsUpdate = true;
+                
+                // Memperbarui material lantai setelah tekstur dimuat
+                floorMaterial.needsUpdate = true;
+                console.log("Tekstur lantai berhasil dimuat dengan pengulangan 10x10!");
+            },
+            null,
+            (err) => { console.error("GAGAL memuat tekstur lantai:", err); }
+        );
+
+        // 4. Buat Material dengan Phong, Emissive, dan Shininess Berbeda
+        const specularColor = new THREE.Color(0x333333);
+
+        // Material untuk Kubus
+        const cubeMaterial = new THREE.MeshPhongMaterial({
+            map: uvTexture,
+            specular: specularColor,
+            shininess: 15,
+            emissive: new THREE.Color(0x440000),
+            emissiveIntensity: 1.0
+        });
+
+        // Material untuk Bola
+        const sphereMaterial = new THREE.MeshPhongMaterial({
+            map: uvTexture,
+            specular: specularColor,
+            shininess: 60,
+            emissive: new THREE.Color(0x004400),
+            emissiveIntensity: 1.0
+        });
+
+        // Material untuk Piramida
+        const pyramidMaterial = new THREE.MeshPhongMaterial({
+            map: uvTexture,
+            specular: specularColor,
+            shininess: 90,
+            emissive: new THREE.Color(0x000055),
+            emissiveIntensity: 1.0
+        });        // Material untuk Lantai dengan debug
+        const floorMaterial = new THREE.MeshPhongMaterial({
+            map: floorTexture,
+            specular: new THREE.Color(0x050505),
+            shininess: 5,
+            color: 0xffffff, // Default warna putih agar tekstur terlihat jelas
+        });
+        
+        console.log("floorMaterial dibuat dengan tekstur:", floorMaterial.map ? "Ada tekstur" : "Tidak ada tekstur");        // 5. Buat Lantai dengan UV yang benar
+        const floorGeometry = new THREE.PlaneGeometry(25, 25, 10, 10); // Tambahkan segmen untuk tekstur yang lebih baik
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -1.5;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // Debug untuk memastikan lantai memiliki tekstur
+        console.log("Lantai dibuat dengan material:", floor.material);
+        console.log("Tekstur pada lantai:", floor.material.map ? "Ada" : "Tidak ada");
+
+        // 6. Buat Objek-objek
+        const objectYPosition = floor.position.y;
+
+        const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
+        const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        cube.position.set(-3.5, objectYPosition + 1, 0);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        scene.add(cube);
+
+        const sphereGeometry = new THREE.SphereGeometry(1.2, 32, 16);
+        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.position.set(0, objectYPosition + 1.2, 0);
+        sphere.castShadow = true;
+        sphere.receiveShadow = true;
+        scene.add(sphere);
+
+        const pyramidRadius = 1.4;
+        const pyramidHeight = 2.2;
+        const pyramidGeometry = new THREE.ConeGeometry(pyramidRadius, pyramidHeight, 4);
+        const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
+        pyramid.position.set(3.5, objectYPosition + pyramidHeight / 2, 0);
+        pyramid.castShadow = true;
+        pyramid.receiveShadow = true;
+        scene.add(pyramid);
+
+        // 7. Mouse Controls Event Listeners
+        document.addEventListener('mousedown', (event) => {
+            isDragging = true;
+            previousMousePosition = {
+                x: event.clientX,
+                y: event.clientY
+            };
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (isDragging) {
+                const deltaMove = {
+                    x: event.clientX - previousMousePosition.x,
+                    y: event.clientY - previousMousePosition.y
+                };
+
+                // Horizontal rotation (around Y axis)
+                cameraAngle -= deltaMove.x * orbitSpeed;
+                
+                // Vertical rotation (adjust camera height)
+                cameraHeight += deltaMove.y * orbitSpeed * 5;
+                // Limit vertical rotation
+                cameraHeight = Math.max(1, Math.min(12, cameraHeight));
+
+                // Apply the new camera position
+                camera.position.x = cameraOrbitRadius * Math.cos(cameraAngle);
+                camera.position.y = cameraHeight;
+                camera.position.z = cameraOrbitRadius * Math.sin(cameraAngle);
+                
+                // Make camera look at the center of the scene
+                camera.lookAt(0, 1, 0);
+
+                previousMousePosition = {
+                    x: event.clientX,
+                    y: event.clientY
+                };
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        document.addEventListener('mouseleave', () => {
+            isDragging = false;
+        });        // 8. Animasi dengan update material jika diperlukan
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Update material secara berkala jika tekstur belum muncul
+            if (floorMaterial.map && !floorMaterial.map.image) {
+                floorMaterial.needsUpdate = true;
+            }
+            
+            renderer.render(scene, camera);
+        }
+
+        // 9. Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
